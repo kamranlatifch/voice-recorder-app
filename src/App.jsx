@@ -38,7 +38,7 @@ export default function App() {
 
   return (
     <div className='app-container'>
-      <h1>Voice Recorder</h1>
+      <h1 style={{ color: 'black' }}>Voice Recorder</h1>
       <div className='recorder-container'>
         {isRecording ? (
           <LiveAudioVisualizer
