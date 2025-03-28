@@ -301,12 +301,12 @@ export default function App() {
       </div> */}
       {!isRecording && (
         <div>
-          <label>Select Microphone: </label>
+          <label style={{ color: 'black' }}>Select Microphone: </label>
           <select
             value={selectedMic}
             onChange={(e) => setSelectedMic(e.target.value)}
           >
-            <option value='default'>Default Microphone</option>
+            {/* <option value='default'>Default Microphone</option> */}
             {mics?.map((mic) => (
               <option key={mic.deviceId} value={mic.deviceId}>
                 {mic.label || `Microphone ${mics.indexOf(mic) + 1}`}
