@@ -101,35 +101,64 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [audioURL, setAudioURL] = useState(null);
   const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [stream, setStream] = useState(null);
   const audioChunks = useRef([]);
-  let retryCount = 0; // To avoid infinite retries
+  let retryCount = 0;
+  const MAX_RETRIES = 5;
 
-  const MAX_RETRIES = 5; // Retry up to 5 times if silent
+  // Function to check if microphone is capturing real sound
+  const checkMicActivity = async (stream) => {
+    const audioContext = new (window.AudioContext ||
+      window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    source.connect(analyser);
+    analyser.fftSize = 512;
+    const buffer = new Uint8Array(analyser.frequencyBinCount);
+
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        analyser.getByteFrequencyData(buffer);
+        const sum = buffer.reduce((a, b) => a + b, 0);
+        resolve(sum > 0); // If sum > 0, sound is detected
+      }, 500);
+    });
+  };
 
   const startRecording = async () => {
     try {
-      console.log(`🎤 Starting recording...`);
+      console.log('🎤 Requesting microphone access...');
 
-      // Get a list of audio input devices
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const mics = devices.filter((d) => d.kind === 'audioinput');
+      // Fetch microphone stream
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 48000, // Opus preferred rate
+          channelCount: 1,
+          noiseSuppression: true,
+          echoCancellation: true,
+        },
+      });
 
-      if (mics.length === 0) {
-        console.warn('⚠️ No microphone found!');
+      console.log('✅ Microphone accessed successfully');
+      setStream(stream);
+
+      // **Check if mic is capturing real sound**
+      const hasAudio = await checkMicActivity(stream);
+      if (!hasAudio) {
+        console.warn('❌ No audio detected! Restarting...');
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          setTimeout(startRecording, 1000);
+        }
         return;
       }
 
-      // **❌ REMOVE `deviceId` CONSTRAINT TO AVOID OVERCONSTRAINED ERROR**
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      console.log(`🎤 Microphone accessed successfully`);
-
+      // **Setup MediaRecorder with Opus codec**
       const recorder = new MediaRecorder(stream, {
         mimeType: 'audio/webm;codecs=opus',
       });
 
       audioChunks.current = [];
-
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunks.current.push(event.data);
@@ -139,7 +168,10 @@ export default function App() {
       recorder.onstop = () => {
         if (audioChunks.current.length === 0) {
           console.warn('❌ No audio data received. Retrying...');
-          startRecording(); // Restart if needed
+          if (retryCount < MAX_RETRIES) {
+            retryCount++;
+            startRecording();
+          }
           return;
         }
 
@@ -150,15 +182,12 @@ export default function App() {
       recorder.start();
       setMediaRecorder(recorder);
       setIsRecording(true);
+      retryCount = 0; // Reset retries on success
     } catch (error) {
       console.error('🚨 Error starting recording:', error);
-
-      // **🔥 Automatic Recovery**
-      if (error.name === 'OverconstrainedError') {
-        console.warn(
-          '⚠️ Overconstrained error! Retrying without constraints...'
-        );
-        setTimeout(startRecording, 1000); // Retry after 1 second
+      if (retryCount < MAX_RETRIES) {
+        retryCount++;
+        setTimeout(startRecording, 1000);
       }
     }
   };
@@ -168,6 +197,9 @@ export default function App() {
     if (mediaRecorder) {
       mediaRecorder.stop();
       setIsRecording(false);
+    }
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
     }
   };
 
