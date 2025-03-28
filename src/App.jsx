@@ -121,11 +121,62 @@ export default function App() {
     console.log('MIC Permissions granted');
     return true;
   };
+  // const startRecording = async () => {
+  //   try {
+  //     console.log('🎤 Starting recording...');
+
+  //     // 🔹 Force default microphone selection
+  //     const devices = await navigator.mediaDevices.enumerateDevices();
+  //     const defaultMic = devices.find(
+  //       (d) => d.kind === 'audioinput' && d.deviceId
+  //     );
+
+  //     if (!defaultMic) {
+  //       alert('No microphone detected. Please check your audio settings.');
+  //       return;
+  //     }
+
+  //     const stream = await navigator.mediaDevices.getUserMedia({
+  //       audio: { deviceId: { exact: defaultMic.deviceId } },
+  //     });
+
+  //     console.log('🎤 Using Default Mic:', defaultMic.label);
+
+  //     const recorder = new MediaRecorder(stream, {
+  //       mimeType: 'audio/webm;codecs=opus',
+  //     });
+
+  //     audioChunks.current = [];
+
+  //     recorder.ondataavailable = (event) => {
+  //       if (event.data.size > 0) {
+  //         audioChunks.current.push(event.data);
+  //       }
+  //     };
+
+  //     recorder.onstop = () => {
+  //       if (audioChunks.current.length === 0) {
+  //         alert('Recording failed. No audio detected.');
+  //         return;
+  //       }
+
+  //       const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
+  //       setAudioURL(URL.createObjectURL(audioBlob));
+  //     };
+
+  //     recorder.start();
+  //     setMediaRecorder(recorder);
+  //     setIsRecording(true);
+  //   } catch (error) {
+  //     console.error('Error starting recording:', error);
+  //     alert('Failed to access the microphone. Try closing other apps.');
+  //   }
+  // };
   const startRecording = async () => {
     try {
-      console.log('🎤 Starting recording...');
+      console.log('🎤 Trying to start recording...');
 
-      // 🔹 Force default microphone selection
+      // Step 1️⃣: Force default microphone selection
       const devices = await navigator.mediaDevices.enumerateDevices();
       const defaultMic = devices.find(
         (d) => d.kind === 'audioinput' && d.deviceId
@@ -142,6 +193,35 @@ export default function App() {
 
       console.log('🎤 Using Default Mic:', defaultMic.label);
 
+      // Step 2️⃣: Check for silent recordings
+      const audioContext = new (window.AudioContext ||
+        window.webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      let hasAudio = false;
+
+      const checkAudioInterval = setInterval(() => {
+        analyser.getByteFrequencyData(dataArray);
+        if (dataArray.some((value) => value > 0)) {
+          hasAudio = true;
+          clearInterval(checkAudioInterval);
+        }
+      }, 500);
+
+      setTimeout(() => {
+        if (!hasAudio) {
+          alert(
+            'Microphone detected, but no sound captured. Restarting recording...'
+          );
+          stream.getTracks().forEach((track) => track.stop()); // Stop bad stream
+          setTimeout(startRecording, 1000); // Restart recording
+        }
+      }, 2000);
+
+      // Step 3️⃣: Start recording with Opus codec (better than WAV)
       const recorder = new MediaRecorder(stream, {
         mimeType: 'audio/webm;codecs=opus',
       });
@@ -156,7 +236,8 @@ export default function App() {
 
       recorder.onstop = () => {
         if (audioChunks.current.length === 0) {
-          alert('Recording failed. No audio detected.');
+          alert('Recording failed. No audio detected. Retrying...');
+          startRecording(); // Restart recording
           return;
         }
 
@@ -172,79 +253,6 @@ export default function App() {
       alert('Failed to access the microphone. Try closing other apps.');
     }
   };
-
-  // const startRecording = async () => {
-  //   try {
-  //     console.log('Trying to start recording v2');
-
-  //     // Stop previous media recorder if active
-  //     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-  //       mediaRecorder.stop();
-  //     }
-
-  //     // Request microphone access
-  //     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-  //     // 🔹 Step 1: Check if the mic is actually receiving any audio
-  //     const audioContext = new AudioContext();
-  //     const source = audioContext.createMediaStreamSource(stream);
-  //     const analyser = audioContext.createAnalyser();
-  //     source.connect(analyser);
-  //     analyser.fftSize = 256;
-
-  //     const bufferLength = analyser.frequencyBinCount;
-  //     const dataArray = new Uint8Array(bufferLength);
-
-  //     const checkAudioInput = () => {
-  //       analyser.getByteFrequencyData(dataArray);
-  //       const hasAudio = dataArray.some((value) => value > 0);
-
-  //       console.log(
-  //         'Mic Activity:',
-  //         hasAudio ? '✅ Audio detected!' : '❌ No sound detected!'
-  //       );
-
-  //       if (!hasAudio) {
-  //         alert(
-  //           'Microphone is detected, but no sound is being captured. Try selecting the correct microphone.'
-  //         );
-  //         stream.getTracks().forEach((track) => track.stop()); // Close unused stream
-  //       }
-  //     };
-
-  //     // Run the check for 2 seconds
-  //     setTimeout(checkAudioInput, 2000);
-
-  //     // 🔹 Step 2: Proceed with recording only if mic is active
-  //     const recorder = new MediaRecorder(stream);
-  //     audioChunks.current = [];
-
-  //     recorder.ondataavailable = (event) => {
-  //       console.log('Audio chunk received:', event.data.size);
-  //       if (event.data.size > 0) {
-  //         audioChunks.current.push(event.data);
-  //       }
-  //     };
-
-  //     recorder.onstop = () => {
-  //       console.log('Recorder stopped. Chunks:', audioChunks.current.length);
-  //       if (audioChunks.current.length === 0) {
-  //         alert('Recording failed. No audio detected.');
-  //         return;
-  //       }
-
-  //       const audioBlob = new Blob(audioChunks.current, { type: 'audio/wav' });
-  //       setAudioURL(URL.createObjectURL(audioBlob));
-  //     };
-
-  //     recorder.start();
-  //     setMediaRecorder(recorder);
-  //     setIsRecording(true);
-  //   } catch (error) {
-  //     console.error('Error starting recording:', error);
-  //     alert('Failed to access the microphone. Try closing other apps.');
-  //   }
-  // };
 
   const stopRecording = () => {
     console.log('Recording is stopped');
