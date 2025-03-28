@@ -130,16 +130,26 @@ export default function App() {
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
+      // ✅ Log stream to check if the microphone is sending data
+      console.log('Audio stream tracks:', stream.getAudioTracks());
+
+      if (!stream.getAudioTracks().length) {
+        alert('No microphone input detected. Please check your mic settings.');
+        return;
+      }
+
       const recorder = new MediaRecorder(stream);
       audioChunks.current = [];
 
       recorder.ondataavailable = (event) => {
+        console.log('Audio chunk received:', event.data.size);
         if (event.data.size > 0) {
           audioChunks.current.push(event.data);
         }
       };
 
       recorder.onstop = () => {
+        console.log('Recorder stopped. Chunks:', audioChunks.current.length);
         if (audioChunks.current.length === 0) {
           alert('Recording failed. Please try again.');
           return;
