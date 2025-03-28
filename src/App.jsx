@@ -108,60 +108,22 @@ export default function App() {
 
   const startRecording = async () => {
     try {
-      console.log(`🎤  v3 Starting recording... (Retry ${retryCount})`);
+      console.log(`🎤 Starting recording...`);
 
-      // 🔹 Step 1: Get the default microphone
+      // Get a list of audio input devices
       const devices = await navigator.mediaDevices.enumerateDevices();
-      let defaultMic = devices.find((d) => d.kind === 'audioinput');
+      const mics = devices.filter((d) => d.kind === 'audioinput');
 
-      if (!defaultMic) {
+      if (mics.length === 0) {
         console.warn('⚠️ No microphone found!');
         return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: { exact: defaultMic.deviceId } },
-      });
+      // **❌ REMOVE `deviceId` CONSTRAINT TO AVOID OVERCONSTRAINED ERROR**
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      console.log(`🎤 Using microphone: ${defaultMic.label}`);
+      console.log(`🎤 Microphone accessed successfully`);
 
-      // 🔹 Step 2: Check for Silence Using Web Audio API
-      const audioContext = new (window.AudioContext ||
-        window.webkitAudioContext)();
-      const source = audioContext.createMediaStreamSource(stream);
-      const analyser = audioContext.createAnalyser();
-      source.connect(analyser);
-
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      let hasAudio = false;
-
-      const checkAudio = setInterval(() => {
-        analyser.getByteFrequencyData(dataArray);
-        if (dataArray.some((value) => value > 0)) {
-          hasAudio = true;
-          clearInterval(checkAudio);
-          retryCount = 0; // Reset retries on success
-        }
-      }, 500);
-
-      setTimeout(async () => {
-        if (!hasAudio) {
-          console.warn(
-            `⚠️ No sound detected. Retrying... (${
-              retryCount + 1
-            }/${MAX_RETRIES})`
-          );
-          stream.getTracks().forEach((track) => track.stop()); // Close the stream
-
-          if (retryCount < MAX_RETRIES) {
-            retryCount++;
-            setTimeout(startRecording, 1000); // Retry after 1 second
-          }
-          return;
-        }
-      }, 2000);
-
-      // 🔹 Step 3: Start Recording Only If Mic is Active
       const recorder = new MediaRecorder(stream, {
         mimeType: 'audio/webm;codecs=opus',
       });
@@ -188,9 +150,16 @@ export default function App() {
       recorder.start();
       setMediaRecorder(recorder);
       setIsRecording(true);
-      retryCount = 0; // Reset retry count on success
     } catch (error) {
       console.error('🚨 Error starting recording:', error);
+
+      // **🔥 Automatic Recovery**
+      if (error.name === 'OverconstrainedError') {
+        console.warn(
+          '⚠️ Overconstrained error! Retrying without constraints...'
+        );
+        setTimeout(startRecording, 1000); // Retry after 1 second
+      }
     }
   };
 
