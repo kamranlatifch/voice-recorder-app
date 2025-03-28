@@ -124,36 +124,48 @@ export default function App() {
 
   const startRecording = async () => {
     try {
-      console.log('Trying to start recording');
+      console.log('Trying to start recording v2');
 
-      // Stop previous media stream if it's still active
+      // Stop previous media recorder if active
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
       }
 
-      const micAvailable = await checkMicUsage();
-      if (!micAvailable) return;
-
+      // Request microphone access
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      // 🔥 STOP ALL PREVIOUS AUDIO STREAMS TO FIX MIC ISSUES
-      stream.getAudioTracks().forEach((track) => {
-        track.stop();
-      });
+      // 🔹 Step 1: Check if the mic is actually receiving any audio
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      source.connect(analyser);
+      analyser.fftSize = 256;
 
-      // 🔥 RESTART AUDIO STREAM TO FIX ISSUES
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-      });
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
 
-      console.log('Audio stream tracked:', newStream.getAudioTracks());
+      const checkAudioInput = () => {
+        analyser.getByteFrequencyData(dataArray);
+        const hasAudio = dataArray.some((value) => value > 0);
 
-      if (!newStream.getAudioTracks().length) {
-        alert('No microphone input detected. Please check your mic settings.');
-        return;
-      }
+        console.log(
+          'Mic Activity:',
+          hasAudio ? '✅ Audio detected!' : '❌ No sound detected!'
+        );
 
-      const recorder = new MediaRecorder(newStream);
+        if (!hasAudio) {
+          alert(
+            'Microphone is detected, but no sound is being captured. Try selecting the correct microphone.'
+          );
+          stream.getTracks().forEach((track) => track.stop()); // Close unused stream
+        }
+      };
+
+      // Run the check for 2 seconds
+      setTimeout(checkAudioInput, 2000);
+
+      // 🔹 Step 2: Proceed with recording only if mic is active
+      const recorder = new MediaRecorder(stream);
       audioChunks.current = [];
 
       recorder.ondataavailable = (event) => {
@@ -166,7 +178,7 @@ export default function App() {
       recorder.onstop = () => {
         console.log('Recorder stopped. Chunks:', audioChunks.current.length);
         if (audioChunks.current.length === 0) {
-          alert('Recording failed. Please try again.');
+          alert('Recording failed. No audio detected.');
           return;
         }
 
