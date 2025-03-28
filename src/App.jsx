@@ -125,20 +125,35 @@ export default function App() {
   const startRecording = async () => {
     try {
       console.log('Trying to start recording');
+
+      // Stop previous media stream if it's still active
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+
       const micAvailable = await checkMicUsage();
       if (!micAvailable) return;
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      // ✅ Log stream to check if the microphone is sending data
-      console.log('Audio stream tracks:', stream.getAudioTracks());
+      // 🔥 STOP ALL PREVIOUS AUDIO STREAMS TO FIX MIC ISSUES
+      stream.getAudioTracks().forEach((track) => {
+        track.stop();
+      });
 
-      if (!stream.getAudioTracks().length) {
+      // 🔥 RESTART AUDIO STREAM TO FIX ISSUES
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+
+      console.log('Audio stream tracked:', newStream.getAudioTracks());
+
+      if (!newStream.getAudioTracks().length) {
         alert('No microphone input detected. Please check your mic settings.');
         return;
       }
 
-      const recorder = new MediaRecorder(stream);
+      const recorder = new MediaRecorder(newStream);
       audioChunks.current = [];
 
       recorder.ondataavailable = (event) => {
