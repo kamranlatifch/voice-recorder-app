@@ -104,6 +104,7 @@ export default function App() {
   const audioChunks = useRef([]);
 
   const checkMicUsage = async () => {
+    console.log('Checking mic permissions');
     const devices = await navigator.mediaDevices.enumerateDevices();
     const micInUse = devices.some(
       (device) =>
@@ -117,11 +118,13 @@ export default function App() {
       );
       return false;
     }
+    console.log('MIC Permissions granted');
     return true;
   };
 
   const startRecording = async () => {
     try {
+      console.log('Trying to start recording');
       const micAvailable = await checkMicUsage();
       if (!micAvailable) return;
 
@@ -156,6 +159,7 @@ export default function App() {
   };
 
   const stopRecording = () => {
+    console.log('Recording is stopped');
     if (mediaRecorder) {
       mediaRecorder.stop();
       setIsRecording(false);
